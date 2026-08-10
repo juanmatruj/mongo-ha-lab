@@ -1,0 +1,36 @@
+# --- Secretos y credenciales ---
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+*.csr
+*.p12
+*.pfx
+keyfile
+secrets/
+certs/
+*.vault
+vault-password*
+
+# --- Claves SSH ---
+id_rsa*
+id_ed25519*
+*.ppk
+
+# --- Datos y estado ---
+data/
+*.log
+*.bak
+dump/
+
+# --- Entorno local ---
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+*.swp
+.idea/
+.vscode/
+*.retry
