@@ -1,0 +1,45 @@
+services:
+  mongo1:
+    image: mongo:7.0.14
+    container_name: mongo1
+    hostname: mongo1
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo1_data:/data/db
+    networks:
+      - mongo-net
+
+  mongo2:
+    image: mongo:7.0.14
+    container_name: mongo2
+    hostname: mongo2
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--port", "27018"]
+    ports:
+      - "27018:27018"
+    volumes:
+      - mongo2_data:/data/db
+    networks:
+      - mongo-net
+
+  mongo3:
+    image: mongo:7.0.14
+    container_name: mongo3
+    hostname: mongo3
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--port", "27019"]
+    ports:
+      - "27019:27019"
+    volumes:
+      - mongo3_data:/data/db
+    networks:
+      - mongo-net
+
+networks:
+  mongo-net:
+    name: mongo-net
+
+volumes:
+  mongo1_data:
+  mongo2_data:
+  mongo3_data:
