@@ -3,12 +3,17 @@ services:
     image: mongo:7.0.14
     container_name: mongo1
     hostname: mongo1
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--port", "27017", "--keyFile", "/etc/mongo/keyfile"]
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--port", "27017",
+              "--keyFile", "/etc/mongo/keyfile",
+              "--tlsMode", "requireTLS",
+              "--tlsCertificateKeyFile", "/etc/mongo/certs/mongo1.pem",
+              "--tlsCAFile", "/etc/mongo/certs/ca.crt", "--tlsAllowConnectionsWithoutCertificates"]
     ports:
       - "27017:27017"
     volumes:
       - mongo1_data:/data/db
       - ../secrets/keyfile:/etc/mongo/keyfile:ro
+      - ../certs:/etc/mongo/certs:ro
     networks:
       - mongo-net
 
@@ -16,12 +21,18 @@ services:
     image: mongo:7.0.14
     container_name: mongo2
     hostname: mongo2
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--port", "27018", "--keyFile", "/etc/mongo/keyfile"]
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--port", "27018",
+              "--keyFile", "/etc/mongo/keyfile",
+              "--tlsMode", "requireTLS",
+              "--tlsCertificateKeyFile", "/etc/mongo/certs/mongo2.pem",
+              "--tlsCAFile", "/etc/mongo/certs/ca.crt", "--tlsAllowConnectionsWithoutCertificates"]
+
     ports:
       - "27018:27018"
     volumes:
       - mongo2_data:/data/db
       - ../secrets/keyfile:/etc/mongo/keyfile:ro
+      - ../certs:/etc/mongo/certs:ro
     networks:
       - mongo-net
 
@@ -29,12 +40,18 @@ services:
     image: mongo:7.0.14
     container_name: mongo3
     hostname: mongo3
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--port", "27019", "--keyFile", "/etc/mongo/keyfile"]
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--port", "27019",
+              "--keyFile", "/etc/mongo/keyfile",
+              "--tlsMode", "requireTLS",
+              "--tlsCertificateKeyFile", "/etc/mongo/certs/mongo3.pem",
+              "--tlsCAFile", "/etc/mongo/certs/ca.crt", "--tlsAllowConnectionsWithoutCertificates"]
+
     ports:
       - "27019:27019"
     volumes:
       - mongo3_data:/data/db
       - ../secrets/keyfile:/etc/mongo/keyfile:ro
+      - ../certs:/etc/mongo/certs:ro
     networks:
       - mongo-net
 
