@@ -9,7 +9,7 @@
 *.p12
 *.pfx
 keyfile
-secrets/
+/secrets/
 certs/
 *.vault
 vault-password*
