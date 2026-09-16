@@ -1,0 +1,77 @@
+---
+- name: Ensure Docker network exists
+  community.docker.docker_network:
+    name: "{{ docker_network_name }}"
+    state: present
+
+- name: Ensure data volumes exist
+  community.docker.docker_volume:
+    name: "{{ mongo_data_volume_prefix }}{{ item.name[-1] }}_data"
+    state: present
+  loop: "{{ mongo_nodes }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Ensure init scripts directory exists
+  ansible.builtin.file:
+    path: "{{ init_scripts_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Render user bootstrap script
+  ansible.builtin.template:
+    src: init-users.js.j2
+    dest: "{{ init_scripts_dir }}/init-users.js"
+    mode: "0644"
+  no_log: true
+
+- name: Ensure MongoDB containers are running
+  community.docker.docker_container:
+    name: "{{ item.name }}"
+    image: "{{ mongo_image }}"
+    hostname: "{{ item.name }}"
+    state: started
+    restart_policy: "{{ container_restart_policy }}"
+    network_mode: "{{ docker_network_name }}"
+    networks:
+      - name: "{{ docker_network_name }}"
+    published_ports:
+      - "{{ item.port }}:{{ item.port }}"
+    env:
+      MONGO_INITDB_ROOT_USERNAME: "{{ mongo_admin_user }}"
+      MONGO_INITDB_ROOT_PASSWORD: "{{ vault_admin_pass }}"
+    volumes:
+      - "{{ mongo_data_volume_prefix }}{{ item.name[-1] }}_data:/data/db"
+      - "{{ secrets_dir }}/keyfile:{{ keyfile_mount }}:ro"
+      - "{{ certs_dir }}:{{ certs_mount }}:ro"
+      - "{{ init_scripts_dir }}:/docker-entrypoint-initdb.d:ro"
+    command:
+      - mongod
+      - --replSet
+      - "{{ replica_set_name }}"
+      - --bind_ip_all
+      - --port
+      - "{{ item.port }}"
+      - --keyFile
+      - "{{ keyfile_mount }}"
+      - --tlsMode
+      - requireTLS
+      - --tlsCertificateKeyFile
+      - "{{ certs_mount }}/{{ item.name }}.pem"
+      - --tlsCAFile
+      - "{{ certs_mount }}/ca.crt"
+      - --tlsAllowConnectionsWithoutCertificates
+  loop: "{{ mongo_nodes }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+
+- name: Wait for MongoDB to accept connections
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ item.port }}"
+    delay: 5
+    timeout: 90
+  loop: "{{ mongo_nodes }}"
+  loop_control:
+    label: "{{ item.name }}"

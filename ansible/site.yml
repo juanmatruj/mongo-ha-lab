@@ -1,0 +1,10 @@
+---
+- name: Provision mongo-ha-lab
+  hosts: all
+  gather_facts: true
+
+  roles:
+    - certificates
+    - secrets
+    - containers
+    - replicaset

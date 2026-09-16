@@ -1,0 +1,13 @@
+---
+docker_network_name: mongo-net
+mongo_data_volume_prefix: mongo
+certs_mount: /etc/mongo/certs
+keyfile_mount: /etc/mongo/keyfile
+container_restart_policy: unless-stopped
+mongo_auth_enabled: true
+init_scripts_dir: "{{ project_root }}/.initdb"
+mongo_admin_user: admin
+mongo_monitor_user: monitoring
+mongo_backup_user: backup_user
+mongo_app_user: app_user
+app_database: labdb
