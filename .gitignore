@@ -13,6 +13,8 @@ secrets/
 certs/
 *.vault
 vault-password*
+.create-users.js
+.initdb/
 
 # --- Claves SSH ---
 id_rsa*
