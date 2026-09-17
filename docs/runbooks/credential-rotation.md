@@ -23,8 +23,8 @@
 ## Pre-checks
 
 ```bash
-cd ~/dbre/proyectos/mongo-ha-lab/compose
-docker compose ps
+cd ~proyectos/mongo-ha-lab/
+docker ps --format "table {{.Names}}\t{{.Status}}"
 ```
 
 All three nodes `Up`. Do not rotate credentials during an availability incident.
@@ -111,6 +111,18 @@ Restart or reload the configuration of everything that uses the credential: the 
 **This is the step that gets forgotten and the one that causes the incident** — typically hours later, when a scheduled job runs with the old credential.
 
 Before closing, enumerate the known consumers of the credential explicitly and confirm each one.
+
+For `admin` or `app_user`, three stores hold the same credential and all three
+must be updated:
+
+1. `ansible/group_vars/all/vault.yml` — authoritative
+   (`ansible-vault edit`)
+2. GitHub repository secrets — `MONGO_ADMIN_PASS`, `MONGO_APP_PASS`
+   (Settings → Secrets and variables → Actions)
+3. The local `.env`, if kept for interactive use
+
+Missing the second means CI starts failing with an authentication error on the
+next push, far enough from the change that the cause is not obvious.
 
 ---
 
