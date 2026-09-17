@@ -1,0 +1,7 @@
+---
+certs_dir: "{{ project_root }}/certs"
+ca_common_name: mongo-ha-lab-CA
+cert_country: ES
+cert_organization: mongo-ha-lab
+ca_key_size: 4096
+node_key_size: 2048

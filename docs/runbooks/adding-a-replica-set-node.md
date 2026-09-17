@@ -25,8 +25,8 @@ If the goal is more fault tolerance, the correct jump is from three to five.
 ## Pre-checks
 
 ```bash
-cd ~/dbre/proyectos/mongo-ha-lab/compose
-docker compose ps
+cd ~/dbre/proyectos/mongo-ha-lab
+docker ps --format "table {{.Names}}\t{{.Status}}"
 df -h /
 ```
 
@@ -46,32 +46,7 @@ Do not add nodes during an incident, or with a secondary already lagging.
 ## Procedure
 
 ### 1 · TLS certificate for the new node
-
-```bash
-cd ~/dbre/proyectos/mongo-ha-lab/certs
-
-openssl genrsa -out mongo4.key 2048
-
-openssl req -new -key mongo4.key -out mongo4.csr \
-  -subj "/C=ES/O=mongo-ha-lab/CN=mongo4"
-
-openssl x509 -req -in mongo4.csr -CA ca.crt -CAkey ca.key \
-  -CAcreateserial -out mongo4.crt -days 825 \
-  -extfile <(printf "subjectAltName=DNS:mongo4,DNS:localhost,IP:127.0.0.1")
-
-cat mongo4.key mongo4.crt > mongo4.pem
-chmod 400 mongo4.pem mongo4.key
-chmod 444 mongo4.crt
-sudo chown 999:999 mongo4.pem
-rm mongo4.csr
-ls -ln
-```
-
-Verify the SAN before continuing:
-
-```bash
-openssl x509 -in mongo4.crt -noout -subject -ext subjectAltName
-```
+The certificate is issued automatically by the `certificates` role, which iterates over `mongo_nodes`. No manual step is required.
 
 ### 2 · Name resolution
 
@@ -81,58 +56,57 @@ sudo nano /etc/hosts
 
 Add `mongo4` to the existing line.
 
-### 3 · Define the service
+### 3 · Declare the node in the inventory
 
 ```bash
-cd ../compose
-nano docker-compose.yml
+nano ansible/inventory/hosts.yml
 ```
 
-Copy an existing service, changing the name, port (27020), volume and certificate path. The **keyfile is the same**: it is a shared secret, not a per-node identity.
+Add an entry to `mongo_nodes`:
 
 ```yaml
-  mongo4:
-    image: mongo:7.0.14
-    container_name: mongo4
-    hostname: mongo4
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--port", "27020",
-              "--keyFile", "/etc/mongo/keyfile",
-              "--tlsMode", "requireTLS",
-              "--tlsCertificateKeyFile", "/etc/mongo/certs/mongo4.pem",
-              "--tlsCAFile", "/etc/mongo/certs/ca.crt",
-              "--tlsAllowConnectionsWithoutCertificates"]
-    ports:
-      - "27020:27020"
-    volumes:
-      - mongo4_data:/data/db
-      - ../secrets/keyfile:/etc/mongo/keyfile:ro
-      - ../certs:/etc/mongo/certs:ro
-    networks:
-      - mongo-net
+    mongo_nodes:
+      - name: mongo1
+        port: 27017
+      - name: mongo2
+        port: 27018
+      - name: mongo3
+        port: 27019
+      - name: mongo4
+        port: 27020
 ```
 
-And declare `mongo4_data:` in the top-level `volumes` block.
+That is the entire change. The certificate, volume, container and port
+publishing are all derived from this list by the roles.
 
 Symmetric port publishing, per [ADR 0001](../adr/0001-symmetric-port-publishing.md).
 
-### 4 · Start the new node only
+### 4 · Provision the new node
 
 ```bash
-docker compose config
-docker compose up -d mongo4
-docker compose ps
-docker compose logs mongo4 | tail -30
+cd ansible
+ansible-playbook site.yml --ask-vault-pass
 ```
 
-Naming the service in `up` avoids touching the existing nodes. Confirm it starts stably before adding it: a container in a restart loop must not be joined to the set.
+The playbook is idempotent: it issues the certificate for the new node,
+creates its volume and starts its container, leaving the existing nodes
+untouched.
+
+```bash
+docker ps --format "table {{.Names}}\t{{.Status}}"
+docker logs mongo4 --tail 30
+```
+
+Confirm the container is stable before joining it to the set: a container in
+a restart loop must not become a member.
 
 ### 5 · Join it to the replica set
 
 Connect to the primary:
 
 ```bash
-mongosh "mongodb://mongo1:27017,mongo2:27018,mongo3:27019/?replicaSet=rs0&authSource=admin" \
-  --tls --tlsCAFile ../certs/ca.crt \
+docker exec -it mongo1 mongosh --port 27017 \
+  --tls --tlsCAFile /etc/mongo/certs/ca.crt --tlsAllowInvalidHostnames \
   --username admin --authenticationDatabase admin
 ```
 
@@ -190,13 +164,16 @@ db.getSiblingDB("labdb").lab.insertOne(
 rs.remove("mongo4:27020")
 ```
 
+Remove the `mongo4` entry from `ansible/inventory/hosts.yml`, then:
+
 ```bash
-docker compose stop mongo4
-docker compose rm -f mongo4
-docker volume rm compose_mongo4_data
+docker rm -f mongo4
+docker volume rm mongo4_data
 ```
 
-Remove `mongo4` from the Compose file and from `/etc/hosts`. The certificates may be kept or deleted.
+Also remove `mongo4` from `/etc/hosts`. Its certificate may be kept or
+deleted; the role will not regenerate it once the node is out of the
+inventory.
 
 ---
 
@@ -207,3 +184,10 @@ Remove `mongo4` from the Compose file and from `/etc/hosts`. The certificates ma
 **Watch the oplog window** during initial sync of large datasets. If the oplog wraps before the new member finishes, the sync fails and must be restarted, usually after enlarging the oplog.
 
 **Effect on quorum.** Every voting member added changes `majorityVoteCount`. Check the arithmetic before applying the change: an even number of voters does not improve fault tolerance.
+
+**Users are not created on a node added later.** The
+`docker-entrypoint-initdb.d` bootstrap runs only on first initialisation of an
+empty volume, and by then the node is not yet a set member. A node joined with
+`rs.add()` receives users through replication from the primary, so no action
+is needed — but the mechanism is different from the initial provisioning and
+worth knowing.

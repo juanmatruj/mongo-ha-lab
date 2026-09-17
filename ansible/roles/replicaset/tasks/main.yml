@@ -1,0 +1,75 @@
+---
+- name: Check whether the replica set is initialised
+  ansible.builtin.command: >
+    docker exec {{ mongo_nodes[0].name }} mongosh
+    --port {{ mongo_nodes[0].port }}
+    --tls --tlsCAFile {{ certs_mount }}/ca.crt
+    --tlsAllowInvalidHostnames
+    --username {{ mongo_admin_user }}
+    --password {{ vault_admin_pass }}
+    --authenticationDatabase admin
+    --quiet --eval "rs.status().ok"
+  register: rs_check
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Initialise the replica set
+  ansible.builtin.command: >
+    docker exec {{ mongo_nodes[0].name }} mongosh
+    --port {{ mongo_nodes[0].port }}
+    --tls --tlsCAFile {{ certs_mount }}/ca.crt
+    --tlsAllowInvalidHostnames
+    --username {{ mongo_admin_user }}
+    --password {{ vault_admin_pass }}
+    --authenticationDatabase admin
+    --quiet --eval
+    'rs.initiate({_id: "{{ replica_set_name }}", members: [{% for n in mongo_nodes %}{_id: {{ loop.index0 }}, host: "{{ n.name }}:{{ n.port }}"}{% if not loop.last %},{% endif %}{% endfor %}]})'
+  when: rs_check.stdout | trim != '1'
+  no_log: true
+
+- name: Wait for a primary to be elected
+  ansible.builtin.command: >
+    docker exec {{ mongo_nodes[0].name }} mongosh
+    --port {{ mongo_nodes[0].port }}
+    --tls --tlsCAFile {{ certs_mount }}/ca.crt
+    --tlsAllowInvalidHostnames
+    --username {{ mongo_admin_user }}
+    --password {{ vault_admin_pass }}
+    --authenticationDatabase admin
+    --quiet --eval "db.hello().isWritablePrimary"
+  register: primary_check
+  until: primary_check.stdout | trim == 'true'
+  retries: 20
+  delay: 5
+  changed_when: false
+  no_log: true
+
+- name: Verify all expected users exist
+  ansible.builtin.command: >
+    docker exec {{ mongo_nodes[0].name }} mongosh
+    --port {{ mongo_nodes[0].port }}
+    --tls --tlsCAFile {{ certs_mount }}/ca.crt
+    --tlsAllowInvalidHostnames
+    --username {{ mongo_admin_user }}
+    --password {{ vault_admin_pass }}
+    --authenticationDatabase admin
+    --quiet --eval "db.getSiblingDB('admin').system.users.countDocuments({})"
+  register: user_count
+  changed_when: false
+  no_log: true
+
+- name: Fail if the bootstrap script did not run
+  ansible.builtin.fail:
+    msg: |
+      Expected 4 users in admin, found {{ user_count.stdout | trim }}.
+
+      The docker-entrypoint-initdb.d script did not run. This happens when:
+        - The volumes were not empty (initdb only runs on first initialisation)
+        - The script or its directory are not readable by UID 999
+
+      To rebuild from scratch:
+        docker rm -f {{ mongo_nodes | map(attribute='name') | join(' ') }}
+        docker volume rm {{ mongo_nodes | map(attribute='name') | map('regex_replace', '^mongo(.)$', 'mongo\\1_data') | join(' ') }}
+        ansible-playbook site.yml --ask-vault-pass
+  when: user_count.stdout | trim | int != 4

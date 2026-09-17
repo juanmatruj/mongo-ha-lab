@@ -6,9 +6,12 @@
 > From container fundamentals to replication architecture, including the
 > failover experiments performed and their interpretation.
 >
-> **Note:** connection examples in this guide predate Stage 2. For current
-> connection commands with authentication and TLS, see
-> [`mongodb-security.md`](mongodb-security.md).
+> **Note:** this guide documents the Docker Compose setup used in stages 1–2.
+> Compose was superseded by Ansible in stage 3 — see
+> [`ansible.md`](ansible.md) for how the lab is provisioned now, and
+> [`mongodb-security.md`](mongodb-security.md) for current connection
+> commands. The replication, networking and failover content below remains
+> accurate and applies regardless of how the containers are created.
 
 ---
 

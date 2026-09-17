@@ -1,0 +1,93 @@
+---
+- name: Ensure certificates directory exists
+  ansible.builtin.file:
+    path: "{{ certs_dir }}"
+    state: directory
+    mode: "0755"
+
+# --- Certificate authority ---
+
+- name: Generate CA private key
+  community.crypto.openssl_privatekey:
+    path: "{{ certs_dir }}/ca.key"
+    size: "{{ ca_key_size }}"
+    mode: "0400"
+
+- name: Generate CA certificate signing request
+  community.crypto.openssl_csr:
+    path: "{{ certs_dir }}/ca.csr"
+    privatekey_path: "{{ certs_dir }}/ca.key"
+    common_name: "{{ ca_common_name }}"
+    country_name: "{{ cert_country }}"
+    organization_name: "{{ cert_organization }}"
+    basic_constraints:
+      - "CA:TRUE"
+    basic_constraints_critical: true
+    key_usage:
+      - keyCertSign
+      - cRLSign
+    key_usage_critical: true
+
+- name: Generate self-signed CA certificate
+  community.crypto.x509_certificate:
+    path: "{{ certs_dir }}/ca.crt"
+    privatekey_path: "{{ certs_dir }}/ca.key"
+    csr_path: "{{ certs_dir }}/ca.csr"
+    provider: selfsigned
+    selfsigned_not_after: "+3650d"
+    mode: "0444"
+
+# --- Per-node certificates ---
+
+- name: Generate node private keys
+  community.crypto.openssl_privatekey:
+    path: "{{ certs_dir }}/{{ item.name }}.key"
+    size: "{{ node_key_size }}"
+    mode: "0400"
+  loop: "{{ mongo_nodes }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Generate node certificate signing requests
+  community.crypto.openssl_csr:
+    path: "{{ certs_dir }}/{{ item.name }}.csr"
+    privatekey_path: "{{ certs_dir }}/{{ item.name }}.key"
+    common_name: "{{ item.name }}"
+    country_name: "{{ cert_country }}"
+    organization_name: "{{ cert_organization }}"
+    subject_alt_name:
+      - "DNS:{{ item.name }}"
+      - "DNS:localhost"
+      - "IP:127.0.0.1"
+  loop: "{{ mongo_nodes }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Sign node certificates with the CA
+  community.crypto.x509_certificate:
+    path: "{{ certs_dir }}/{{ item.name }}.crt"
+    csr_path: "{{ certs_dir }}/{{ item.name }}.csr"
+    ownca_path: "{{ certs_dir }}/ca.crt"
+    ownca_privatekey_path: "{{ certs_dir }}/ca.key"
+    ownca_not_after: "+825d"
+    provider: ownca
+    mode: "0444"
+  loop: "{{ mongo_nodes }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Assemble node PEM bundles
+  ansible.builtin.shell: "cat {{ certs_dir }}/{{ item.name }}.key {{ certs_dir }}/{{ item.name }}.crt > {{ certs_dir }}/{{ item.name }}.pem"
+  args:
+    creates: "{{ certs_dir }}/{{ item.name }}.pem"
+  loop: "{{ mongo_nodes }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Set permissions on PEM bundles
+  ansible.builtin.file:
+    path: "{{ certs_dir }}/{{ item.name }}.pem"
+    mode: "0644"
+  loop: "{{ mongo_nodes }}"
+  loop_control:
+    label: "{{ item.name }}"

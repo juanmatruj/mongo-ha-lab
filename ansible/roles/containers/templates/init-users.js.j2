@@ -1,0 +1,20 @@
+// Created during container bootstrap, before the server accepts external connections.
+db = db.getSiblingDB("admin");
+
+db.createUser({
+  user: {{ mongo_monitor_user | to_json }},
+  pwd: {{ vault_monitor_pass | to_json }},
+  roles: [{ role: "clusterMonitor", db: "admin" }]
+});
+
+db.createUser({
+  user: {{ mongo_backup_user | to_json }},
+  pwd: {{ vault_backup_pass | to_json }},
+  roles: [{ role: "backup", db: "admin" }]
+});
+
+db.createUser({
+  user: {{ mongo_app_user | to_json }},
+  pwd: {{ vault_app_pass | to_json }},
+  roles: [{ role: "readWrite", db: {{ app_database | to_json }} }]
+});

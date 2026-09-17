@@ -9,10 +9,12 @@
 *.p12
 *.pfx
 keyfile
-secrets/
+/secrets/
 certs/
 *.vault
 vault-password*
+.create-users.js
+.initdb/
 
 # --- Claves SSH ---
 id_rsa*
